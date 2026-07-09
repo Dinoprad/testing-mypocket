@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <base target="_top">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <?!= include('Style'); ?>
+</head>
+<body id="appBody">
+  <div id="loginPage" class="login-container">
+    <div class="login-box">
+      <h2>Login MyPocket</h2>
+      <input type="text" id="username" placeholder="Username">
+      <input type="password" id="password" placeholder="Password">
+      <button onclick="doLogin()">Login</button>
+      <p id="loginError" style="color:red; display:none;"></p>
+    </div>
+  </div>
+
+  <div id="mainApp" style="display:none;">
+    <nav class="navbar">
+      <div class="nav-links">
+        <button onclick="nav('dashboard')">Dashboard</button>
+        <button onclick="nav('pocketNinda')">Pocket Ninda</button>
+        <button onclick="nav('pocketKita')">Pocket Kita</button>
+        <button onclick="nav('wishlist')">Wishlist</button>
+        <button onclick="nav('minigame'); initMinigame();" style="color:#ffeb3b;">MiniGame</button>
+      </div>
+      <div class="nav-right">
+        <span id="clock" class="clock"></span>
+        <button class="nav-icon" onclick="nav('strike')"><i class="fa-solid fa-fire strike-logo"></i> <span id="navStreakCount">0</span></button>
+        <button onclick="logout()">Keluar</button>
+      </div>
+    </nav>
+
+    <div id="emojiContainer" class="emoji-container">
+      <div class="float-emoji e-bunga" onclick="showPop(this, 'Semangat yaaa!!')">🌸<span class="pop-text"></span></div>
+      <div class="float-emoji e-beruang" onclick="showPop(this, 'Jangan nakal yaa!!')">🐻<span class="pop-text"></span></div>
+      <div class="float-emoji e-love" onclick="showPop(this, 'Sayang nindaa!!')">💖<span class="pop-text"></span></div>
+    </div>
+
+    <div class="content-area">
+      <div id="page-dashboard" class="page active"><h2>Dashboard</h2><div class="cards"><div class="card"><h3>Pocket Ninda</h3><p id="dashNindaSisa">Rp 0</p></div><div class="card"><h3>Pocket Kita</h3><p id="dashKitaSisa">Rp 0</p></div></div><div class="chart-container"><canvas id="myChart"></canvas></div></div>
+      <div id="page-pocketNinda" class="page"><h2>Pocket Ninda</h2><div class="summary-box">Pemasukan: <b id="nindaIn">Rp 0</b> | Pengeluaran: <b id="nindaOut">Rp 0</b></div><div class="form-group"><input type="hidden" id="nId"><input type="text" id="nNama" placeholder="Nama Mutasi"><select id="nKategori"><option value="Pemasukan">Pemasukan</option><option value="Pengeluaran">Pengeluaran</option></select><input type="number" id="nJumlah" placeholder="Jumlah"><select id="nJenis"><option value="Jajan">Jajan</option><option value="Makan">Makan</option><option value="Gaji">Gaji</option><option value="Lainnya">Lainnya</option></select><input type="date" id="nTanggal"><button onclick="saveNinda()">Simpan</button></div><table class="data-table"><thead><tr><th>Nama</th><th>Kat</th><th>Jumlah</th><th>Jenis</th><th>Tanggal</th><th>Aksi</th></tr></thead><tbody id="tblNinda"></tbody></table></div>
+      <div id="page-pocketKita" class="page"><h2>Pocket Kita</h2><div class="summary-box">Total: <b id="kitaTotal">Rp 0</b></div><div class="form-group"><input type="hidden" id="kId"><input type="text" id="kNama" placeholder="Nama Tabungan"><input type="number" id="kJumlah" placeholder="Jumlah"><input type="date" id="kTanggal"><button onclick="saveKita()">Simpan</button></div><table class="data-table"><thead><tr><th>Nama</th><th>Jumlah</th><th>Tanggal</th><th>Aksi</th></tr></thead><tbody id="tblKita"></tbody></table></div>
+      <div id="page-wishlist" class="page"><h2>Wishlist</h2><div class="summary-box">Total Biaya: <b id="wishTotal">Rp 0</b></div><div class="form-group"><input type="hidden" id="wId"><input type="text" id="wNama" placeholder="Nama"><input type="number" id="wBiaya" placeholder="Biaya"><input type="text" id="wLokasi" placeholder="Lokasi"><input type="text" id="wHari" placeholder="Hari"><button onclick="saveWishlist()">Simpan</button></div><table class="data-table"><thead><tr><th>Nama</th><th>Biaya</th><th>Lokasi</th><th>Hari</th><th>Aksi</th></tr></thead><tbody id="tblWishlist"></tbody></table></div>
+      <div id="page-strike" class="page" style="text-align: center;"><h2>Pasutri Strike! 🔥 <span id="strikeTitle">0 Days</span></h2><div class="strike-container"><div class="fire-box ninda-fire"><button id="btnStrikeNinda" onclick="hitStrike('ninda')"><i class="fa-solid fa-fire heartbeat"></i></button><p>Api Ninda</p><small id="statNinda"></small></div><div class="fire-box dino-fire"><button id="btnStrikeDino" onclick="hitStrike('dino')"><i class="fa-solid fa-fire heartbeat"></i></button><p>Api Dino</p><small id="statDino"></small></div></div></div>
+
+      <div id="page-minigame" class="page">
+        <div class="minigame-header">
+          <div class="profile-area"><h3 id="mgPlayerName">User</h3><div id="mgTitle" class="title-badge title-amateur">Amateur</div><p>Wins: <span id="mgWins">0</span> 🏆</p></div>
+          <button onclick="toggleShop()" class="btn-shop"><i class="fa-solid fa-store"></i> Toko (Strikes: <span id="mgStrikeBal">0</span>)</button>
+        </div>
+
+        <div class="uno-lobby" id="unoLobby">
+          <h2>UNO Couple Lobby</h2>
+          <div class="player-slots">
+            <div class="slot ninda-slot" id="slotNinda"><h4>Ninda</h4><p class="status">Menunggu...</p></div>
+            <div class="slot dino-slot" id="slotDino"><h4>Dino</h4><p class="status">Menunggu...</p></div>
+          </div>
+          <button class="btn-ready" id="btnReady" onclick="toggleReady()">READY</button>
+        </div>
+
+        <div id="unoGameArea" class="uno-game-area" style="display:none;">
+          <div class="game-board" id="gameBoard">
+             <div class="player-border" id="playerBorder" style="position:relative;">
+                
+                <button onclick="quitUNO()" style="position:absolute; top:15px; left:15px; background:#f44336; color:white; border:none; padding:8px 12px; border-radius:5px; cursor:pointer; font-weight:bold; z-index:10;"><i class="fa-solid fa-right-from-bracket"></i> Keluar</button>
+
+                <div class="uno-board-layout">
+                   <div class="opp-area">
+                       <p style="color:#fff; text-shadow: 1px 1px 2px #000; font-weight:bold;">Kartu Lawan: <span id="oppCardCount">0</span></p>
+                       <div id="oppCardsUI" class="card-row"></div>
+                   </div>
+                   <div class="center-area">
+                       <div class="uno-card deck-card" onclick="reqDrawCard()">DRAW<br>+</div>
+                       <div id="topCardUI"></div>
+                   </div>
+                   <h3 id="turnIndicator" style="color:white; text-shadow: 1px 1px 2px #000; margin:10px 0;">Giliran: -</h3>
+                   <div class="my-area">
+                       <div id="myCardsUI" class="card-row"></div>
+                   </div>
+                </div>
+             </div>
+          </div>
+        </div>
+
+        <div id="unoShop" class="uno-shop" style="display:none;">
+          <h2>Toko Kustomisasi</h2><button onclick="toggleShop()" style="margin-bottom:10px; padding: 5px 15px; background: #f44336; color:white; border:none; border-radius:5px;">Tutup</button>
+          <h3>Papan Permainan (Board)</h3><div class="shop-grid" id="shopBoard"></div>
+          <h3>Border Profil</h3><div class="shop-grid" id="shopBorder"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <?!= include('Script'); ?>
+</body>
+</html>
