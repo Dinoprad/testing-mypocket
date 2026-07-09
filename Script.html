@@ -1,0 +1,232 @@
+<script>
+  let currentUser = ''; let appData = {}; let chartInstance = null; let lobbyInterval = null; let gameInterval = null;
+
+  setInterval(() => { document.getElementById('clock').innerText = new Date().toLocaleTimeString('id-ID', { timeZoneName: 'short' }); }, 1000);
+
+  function doLogin() {
+    const u = document.getElementById('username').value.trim().toLowerCase(), p = document.getElementById('password').value;
+    google.script.run.withSuccessHandler(res => {
+      if(res.success) {
+        currentUser = res.user; document.getElementById('loginPage').style.display = 'none'; document.getElementById('mainApp').style.display = 'block';
+        document.body.className = currentUser === 'ninda' ? 'theme-ninda' : 'theme-dino';
+        document.getElementById('btnStrikeNinda').disabled = (currentUser !== 'ninda'); document.getElementById('btnStrikeDino').disabled = (currentUser !== 'dino');
+        loadData(); 
+      } else { const err = document.getElementById('loginError'); err.style.display = 'block'; err.innerText = res.message; }
+    }).verifyLogin(u, p);
+  }
+  function logout() { document.getElementById('loginPage').style.display = 'flex'; document.getElementById('mainApp').style.display = 'none'; document.body.className = ''; nav('dashboard'); }
+
+  function nav(pageId) {
+    document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+    document.getElementById('page-' + pageId).classList.add('active');
+    
+    if(lobbyInterval) clearInterval(lobbyInterval);
+    if(gameInterval) clearInterval(gameInterval);
+
+    if(pageId === 'minigame') {
+      lobbyInterval = setInterval(() => { google.script.run.withSuccessHandler(updateLobbyUI).getLobbyStatus(); }, 3000);
+    }
+  }
+
+  // --- KODE POCKET, WISHLIST, STRIKE, CHART ---
+function loadData() {
+  console.log("Mencoba menarik data...");
+  google.script.run.withSuccessHandler(res => {
+    // Jika res tidak kosong, baru jalankan renderAll
+    if (res && res.totals) {
+      console.log("Data diterima:", res);
+      appData = res;
+      renderAll();
+    } else {
+      console.warn("Spreadsheet kosong atau belum ada data. Silakan isi data dulu.");
+      // Tetap render untuk menampilkan tabel kosong
+      appData = { totals: {nindaSisa:0, kitaSisa:0}, nindaData:[], kitaData:[], wishlistData:[] };
+      renderAll();
+    }
+  }).getDashboardData();
+}
+  function formatRp(angka) { return new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR' }).format(angka); }
+function renderAll() {
+    // Jangan return jika kosong, tapi beri nilai default agar tidak error
+    if (!appData) appData = { totals: {nindaSisa:0, kitaSisa:0}, nindaData:[], kitaData:[], wishlistData:[] };
+    
+    // Gunakan nilai default 0 jika totals tidak ada
+    const nSisa = appData.totals ? appData.totals.nindaSisa : 0;
+    const kSisa = appData.totals ? appData.totals.kitaSisa : 0;
+
+    document.getElementById('dashNindaSisa').innerText = formatRp(nSisa);
+    document.getElementById('dashKitaSisa').innerText = formatRp(kSisa);
+    
+    // ... lanjut ke renderTable ...
+    renderTable('tblNinda', appData.nindaData || [], [...]);
+}
+function renderTable(tbodyId, dataArray, inputIds) {
+    const tbody = document.getElementById(tbodyId);
+    tbody.innerHTML = '';
+    
+    if (!dataArray || dataArray.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;">Belum ada data</td></tr>';
+        return;
+    }
+
+    dataArray.forEach(row => {
+        let tr = document.createElement('tr');
+        // row[0] adalah ID, row[1] Nama, row[2] Kategori, dst.
+        // Kita loop dari indeks 1 (Nama) sampai 5 (Tanggal)
+        for(let i=1; i < row.length; i++) {
+            let td = document.createElement('td');
+            let val = row[i];
+            // Format Mata Uang untuk kolom Jumlah (biasanya indeks 3 untuk Ninda)
+            td.innerText = (i === 3 && !isNaN(val)) ? formatRp(val) : val;
+            tr.appendChild(td);
+        }
+        
+        let tdAksi = document.createElement('td');
+        // Kirim seluruh baris (termasuk ID di row[0]) untuk fungsi edit
+        tdAksi.innerHTML = `<button class="btn-edit" onclick='editRow(${JSON.stringify(row)}, ${JSON.stringify(inputIds)})'>Edit</button>`;
+        tr.appendChild(tdAksi);
+        tbody.appendChild(tr);
+    });
+}
+  function editRow(r, iIds) { iIds.forEach((id, idx) => { let el = document.getElementById(id); if(el) { if (el.type === 'date') { try { let d = new Date(r[idx]); el.value = d.toISOString().split('T')[0]; } catch(e) { el.value = r[idx]; } } else { el.value = r[idx]; } } }); }
+  function saveNinda() { const i=document.getElementById('nId').value, d=[document.getElementById('nNama').value, document.getElementById('nKategori').value, document.getElementById('nJumlah').value, document.getElementById('nJenis').value, document.getElementById('nTanggal').value]; if(i) google.script.run.withSuccessHandler(r=>{appData=r;renderAll();clearForm(['nId','nNama','nJumlah','nTanggal']);}).updateData('PocketNinda',i,d); else google.script.run.withSuccessHandler(r=>{appData=r;renderAll();clearForm(['nId','nNama','nJumlah','nTanggal']);}).saveData('PocketNinda',d); }
+  function saveKita() { const i=document.getElementById('kId').value, d=[document.getElementById('kNama').value, document.getElementById('kJumlah').value, document.getElementById('kTanggal').value]; if(i) google.script.run.withSuccessHandler(r=>{appData=r;renderAll();clearForm(['kId','kNama','kJumlah','kTanggal']);}).updateData('PocketKita',i,d); else google.script.run.withSuccessHandler(r=>{appData=r;renderAll();clearForm(['kId','kNama','kJumlah','kTanggal']);}).saveData('PocketKita',d); }
+  function saveWishlist() { const i=document.getElementById('wId').value, d=[document.getElementById('wNama').value, document.getElementById('wBiaya').value, document.getElementById('wLokasi').value, document.getElementById('wHari').value]; if(i) google.script.run.withSuccessHandler(r=>{appData=r;renderAll();clearForm(['wId','wNama','wBiaya','wLokasi','wHari']);}).updateData('Wishlist',i,d); else google.script.run.withSuccessHandler(r=>{appData=r;renderAll();clearForm(['wId','wNama','wBiaya','wLokasi','wHari']);}).saveData('Wishlist',d); }
+  function clearForm(ids) { ids.forEach(id => document.getElementById(id).value = ''); }
+  function hitStrike(u) { const b = document.getElementById('btnStrike' + (u === 'ninda' ? 'Ninda' : 'Dino')); b.innerHTML = '...'; b.disabled = true; google.script.run.withSuccessHandler(r => { b.innerHTML = '<i class="fa-solid fa-fire heartbeat"></i>'; b.disabled = false; alert('Api sukses ditekan!'); loadData(); }).handleStrike(u); }
+  function renderChart() { const ctx = document.getElementById('myChart').getContext('2d'); const lbls = appData.nindaData.map(r => r[1]).slice(-5), dN = appData.nindaData.map(r => r[3]).slice(-5), dK = appData.kitaData.map(r => r[2]).slice(-5); while(dK.length < lbls.length) dK.push(0); if (chartInstance) chartInstance.destroy(); chartInstance = new Chart(ctx, { type: 'line', data: { labels: lbls, datasets: [ { label: 'Total Ninda', data: dN, borderColor: '#ff69b4', backgroundColor: 'rgba(255, 105, 180, 0.2)', fill: true }, { label: 'Total Kita', data: dK, borderColor: '#03a9f4', backgroundColor: 'rgba(3, 169, 244, 0.2)', fill: true } ] }, options: { responsive: true, maintainAspectRatio: false } }); }
+  function showPop(el, txt) { const p = el.querySelector('.pop-text'); p.innerText = txt; p.classList.add('show'); setTimeout(() => { p.classList.remove('show'); }, 2000); }
+
+  // ================= MINIGAME LOBBY & SHOP =================
+  let mgData = { wins: 0, equippedBoard: 'board-0', equippedBorder: 'border-0', inventory: [], strikes: 0 };
+  const shopItems = { boards: [{id: 'board-0', name: 'Coklat Kayu', price: 0}, {id: 'board-1', name: 'Putih', price: 1}, {id: 'board-2', name: 'Biru', price: 2}, {id: 'board-3', name: 'Pink', price: 2}, {id: 'board-4', name: 'Gradasi Biru Pink', price: 5}, {id: 'board-5', name: 'Gradasi Mengkilat', price: 10}, {id: 'board-6', name: 'Biru Kristal', price: 20}, {id: 'board-7', name: 'Pink Kristal', price: 30}, {id: 'board-8', name: 'Emas Kristal', price: 50}], borders: [{id: 'border-0', name: 'Coklat Kayu', price: 0}, {id: 'border-1', name: 'Putih', price: 1}, {id: 'border-2', name: 'Biru', price: 2}, {id: 'border-3', name: 'Pink', price: 2}, {id: 'border-4', name: 'Gradasi', price: 5}, {id: 'border-5', name: 'Mengkilat', price: 10}, {id: 'border-6', name: 'Biru Diamond', price: 20}] };
+  
+  function initMinigame() { document.getElementById('mgPlayerName').innerText = currentUser.toUpperCase(); google.script.run.withSuccessHandler(r => { mgData = r; updateMinigameUI(); renderShop(); }).getMinigameData(currentUser); }
+  function updateMinigameUI() {
+    document.getElementById('mgWins').innerText = mgData.wins; document.getElementById('mgStrikeBal').innerText = mgData.strikes;
+    document.getElementById('gameBoard').className = 'game-board ' + mgData.equippedBoard; document.getElementById('playerBorder').className = 'player-border ' + mgData.equippedBorder;
+    const t = document.getElementById('mgTitle'); let tN = "Beginner", tC = "";
+    if(mgData.wins >= 10) { tN = "Amateur"; tC = "title-amateur"; } if(mgData.wins >= 30) { tN = "Pro"; tC = "title-pro"; } if(mgData.wins >= 60) { tN = "Master"; tC = "title-master"; } if(mgData.wins >= 90) { tN = "GrandMaster"; tC = "title-grandmaster"; } if(mgData.wins >= 120){ tN = "Champion"; tC = "title-champion"; } if(mgData.wins >= 200){ tN = "G.O.A.T"; tC = "title-goat"; }
+    t.innerText = tN; t.className = "title-badge " + tC;
+  }
+  function toggleShop() { const s = document.getElementById('unoShop'); s.style.display = s.style.display === 'none' ? 'block' : 'none'; }
+  function renderShop() { const r = (items, id, type) => { const c = document.getElementById(id); c.innerHTML = ''; items.forEach(i => { let owned = mgData.inventory.includes(i.id); let btn = owned ? `<button onclick="equipItem('${type}', '${i.id}')" style="background:#4CAF50">Pakai</button>` : `<button onclick="buy('${type}', '${i.id}', ${i.price})">Beli (${i.price} 🔥)</button>`; c.innerHTML += `<div class="shop-item ${i.id}"><h4>${i.name}</h4>${btn}</div>`; }); }; r(shopItems.boards, 'shopBoard', 'board'); r(shopItems.borders, 'shopBorder', 'border'); }
+  function buy(type, id, price) { if (mgData.strikes < price) { alert("Strike kamu tidak cukup!"); return; } if (confirm(`Yakin beli seharga ${price} strike?`)) { google.script.run.withSuccessHandler(r => { if(r.success) { alert('Berhasil!'); initMinigame(); } else alert(r.message); }).buyItem(currentUser, type, id, price); } }
+  function equipItem(type, id) { if(type === 'board') mgData.equippedBoard = id; if(type === 'border') mgData.equippedBorder = id; updateMinigameUI(); }
+
+  // ================= LOGIKA UNO REALTIME =================
+  let isReady = false;
+  function toggleReady() {
+    isReady = !isReady;
+    document.getElementById('btnReady').innerText = isReady ? 'BATAL READY' : 'READY'; document.getElementById('btnReady').style.background = isReady ? '#f44336' : '#ff9800';
+    google.script.run.withSuccessHandler(updateLobbyUI).setLobbyReady(currentUser, isReady);
+  }
+
+  function updateLobbyUI(status) {
+    const sN = document.getElementById('slotNinda'), sD = document.getElementById('slotDino');
+    if(status.nindaReady) { sN.classList.add('ready'); sN.querySelector('.status').innerText = 'READY!'; } else { sN.classList.remove('ready'); sN.querySelector('.status').innerText = 'Menunggu...'; }
+    if(status.dinoReady) { sD.classList.add('ready'); sD.querySelector('.status').innerText = 'READY!'; } else { sD.classList.remove('ready'); sD.querySelector('.status').innerText = 'Menunggu...'; }
+    
+    if(status.nindaReady && status.dinoReady) {
+      clearInterval(lobbyInterval);
+      document.getElementById('unoLobby').style.display = 'none'; document.getElementById('unoGameArea').style.display = 'block';
+      gameInterval = setInterval(fetchGameState, 3000); 
+      fetchGameState();
+    }
+  }
+
+  // FUNGSI KELUAR GAME DAN RESET LOBBY
+  function quitUNO() {
+    if(confirm("Yakin ingin keluar dan menghentikan permainan UNO?")) {
+      google.script.run.withSuccessHandler(() => {
+        forceLobbyReset();
+      }).quitGame();
+    }
+  }
+
+  function forceLobbyReset() {
+    isReady = false;
+    document.getElementById('btnReady').innerText = 'READY';
+    document.getElementById('btnReady').style.background = '#ff9800';
+    document.getElementById('unoLobby').style.display = 'block'; 
+    document.getElementById('unoGameArea').style.display = 'none';
+    if(gameInterval) clearInterval(gameInterval);
+    if(lobbyInterval) clearInterval(lobbyInterval);
+    lobbyInterval = setInterval(() => { google.script.run.withSuccessHandler(updateLobbyUI).getLobbyStatus(); }, 3000);
+  }
+
+  function fetchGameState() {
+    google.script.run.withSuccessHandler(renderUnoGame).getGameState(currentUser);
+  }
+
+  function generateCardHTML(card, index = -1) {
+    if (!card.color) return '';
+    let clickAttr = index >= 0 ? `onclick="reqPlayCard(${index})"` : '';
+    return `<div class="uno-card card-${card.color}" ${clickAttr}>${card.value}</div>`;
+  }
+
+// ==== LOGIKA UNO REALTIME & PERBAIKAN BUG NOTIFIKASI ====
+  let gameAcknowledged = false; // Flag untuk mencegah notif spam
+
+  function renderUnoGame(state) {
+    // 1. Jika game baru selesai dan belum dibaca
+    if (state.status === 'FINISHED' && !gameAcknowledged) {
+      gameAcknowledged = true;
+      alert(`Permainan Selesai! Pemenangnya adalah ${state.winner.toUpperCase()}! 🏆`);
+      google.script.run.markGameAcknowledged(); // Beritahu server kita sudah baca
+      forceLobbyReset();
+      return;
+    }
+
+    // 2. Jika statusnya sudah ACK (tanda game selesai sudah dibaca)
+    if (state.status === 'FINISHED_ACK') {
+      forceLobbyReset();
+      return;
+    }
+
+    // 3. Jika statusnya WAITING atau RESET
+    if (state.status === 'WAITING') {
+      forceLobbyReset();
+      return;
+    }
+
+    // --- RENDER GAME NORMAL ---
+    document.getElementById('topCardUI').innerHTML = generateCardHTML(state.topCard);
+    document.getElementById('oppCardCount').innerText = state.oppCardCount;
+    let oppHTML = ''; for(let i=0; i<state.oppCardCount; i++) oppHTML += `<div class="uno-card card-back">UNO</div>`;
+    document.getElementById('oppCardsUI').innerHTML = oppHTML;
+
+    let myHTML = ''; state.myHand.forEach((c, idx) => myHTML += generateCardHTML(c, idx));
+    document.getElementById('myCardsUI').innerHTML = myHTML;
+
+    const turnEl = document.getElementById('turnIndicator');
+    turnEl.innerText = state.turn === currentUser ? 'Giliran: KAMU JALAN!' : `Giliran: ${state.turn.toUpperCase()}`;
+    turnEl.style.color = state.turn === currentUser ? '#4CAF50' : '#fff';
+  }
+
+  function forceLobbyReset() {
+    gameAcknowledged = false; // Reset flag saat game dimulai ulang
+    isReady = false;
+    document.getElementById('btnReady').innerText = 'READY';
+    document.getElementById('btnReady').style.background = '#ff9800';
+    document.getElementById('unoLobby').style.display = 'block'; 
+    document.getElementById('unoGameArea').style.display = 'none';
+    if(gameInterval) clearInterval(gameInterval);
+    if(lobbyInterval) clearInterval(lobbyInterval);
+    lobbyInterval = setInterval(() => { google.script.run.withSuccessHandler(updateLobbyUI).getLobbyStatus(); }, 3000);
+  }
+
+  function reqPlayCard(index) {
+    google.script.run.withSuccessHandler(res => {
+      if(!res.success) alert(res.message);
+      else fetchGameState(); // update instant tanpa nunggu interval
+    }).playUnoCard(currentUser, index);
+  }
+
+  function reqDrawCard() {
+    google.script.run.withSuccessHandler(res => {
+      if(!res.success) alert(res.message);
+      else fetchGameState();
+    }).drawUnoCard(currentUser);
+  }
+</script>
